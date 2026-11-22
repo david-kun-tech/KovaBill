@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KovaBill · logo tuner</title>
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/geist/index.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/geist-mono/index.css" />
+    <style>
+      :root { --paper: #ecebe4; --ink: #12130f; --lime: #9bff3a; --muted: #6b6e65; font-family: 'Geist Variable', system-ui, sans-serif; color: var(--ink); }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--paper); }
+      .wrap { display: grid; grid-template-columns: 320px 1fr; min-height: 100dvh; }
+      @media (max-width: 820px) { .wrap { grid-template-columns: 1fr; } aside { position: static !important; height: auto !important; } }
+      aside { position: sticky; top: 0; height: 100dvh; overflow: auto; background: #f6f5f0; border-right: 1px solid #dddcd3; padding: 22px; }
+      aside h1 { font-size: 1.2rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+      aside p { margin: 0 0 16px; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+      fieldset { border: 0; padding: 0; margin: 0 0 18px; }
+      legend { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+      label { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 0.86rem; margin-bottom: 10px; }
+      label output { font-family: 'Geist Mono Variable', monospace; font-size: 0.8rem; color: var(--muted); }
+      label input[type='range'] { grid-column: 1 / -1; width: 100%; accent-color: var(--ink); }
+      .colors { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .colors label { grid-template-columns: auto 1fr; align-items: center; margin: 0; }
+      .colors input { width: 34px; height: 28px; border: 1px solid #dddcd3; border-radius: 8px; padding: 0; background: none; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      button { font: inherit; font-size: 0.85rem; font-weight: 600; border: 1px solid #dddcd3; background: #fff; border-radius: 99px; padding: 8px 14px; cursor: pointer; }
+      button.ink { background: var(--ink); color: #fff; border-color: var(--ink); }
+      .code { margin-top: 12px; font-family: 'Geist Mono Variable', monospace; font-size: 0.74rem; background: var(--ink); color: var(--lime); border-radius: 12px; padding: 12px; white-space: pre-wrap; word-break: break-word; }
+      main { padding: 28px; display: grid; gap: 16px; align-content: start; min-width: 0; overflow-x: hidden; }
+      .stage { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+      .card { background: #f6f5f0; border: 1px solid #dddcd3; border-radius: 24px; display: grid; place-items: center; padding: 34px; min-height: 280px; }
+      .card.dark { background: var(--ink); border-color: var(--ink); color: #fff; }
+      .card .big { width: min(260px, 100%); height: auto; }
+      .lockup { display: flex; align-items: center; gap: 0.36em; font-size: 46px; }
+      .lockup svg { height: 1.6em; width: auto; }
+      .wm { letter-spacing: -0.035em; white-space: nowrap; }
+      .wm b { font-weight: 720; } .wm span { font-weight: 330; }
+      .icons { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; padding: 6px 0; }
+      .app { display: grid; place-items: center; border-radius: 22%; background: var(--ink); }
+      .app svg { width: 70%; height: auto; }
+      .cap { font-size: 0.78rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <aside>
+        <h1>Logo tuner · Trailing</h1>
+        <p>Drag the sliders and everything on the right updates. When you like it, press <b>Copy settings</b> and paste them to me (or just tell me what you changed).</p>
+        <form id="controls"></form>
+        <div class="row">
+          <button type="button" class="ink" id="copy">Copy settings</button>
+          <button type="button" id="reset">Reset</button>
+        </div>
+        <div class="code" id="code"></div>
+      </aside>
+      <main>
+        <div class="stage">
+          <div class="card" id="light"></div>
+          <div class="card dark" id="dark"></div>
+        </div>
+        <div class="stage">
+          <div class="card" id="lockLight"></div>
+          <div class="card dark" id="lockDark"></div>
+        </div>
+        <div>
+          <div class="cap">App icon → browser tab (120 · 64 · 32 · 16 px)</div>
+          <div class="icons" id="icons"></div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module">
+      const DEFAULTS = {
+        lean: 0.24, stem: 18, thick: 18, gap: 7, slope: 0.96, pages: 2,
+        firstPage: 40, shrink: 10, overlap: 0, round: 1.2,
+        kColor: '#12130f', page1: '#4d9a12', page2: '#9bff3a', page3: '#c9cbc2',
+        kDark: '#f1f1eb',
+      };
+      const SLIDERS = [
+        ['Shape', [
+          ['lean', 'Lean to the left', 0, 0.5, 0.01],
+          ['stem', 'Stem width', 8, 34, 1],
+          ['thick', 'Arm / page thickness', 8, 30, 1],
+          ['slope', 'Arm angle (wider ↔ steeper)', 0.5, 1.6, 0.02],
+          ['round', 'Corner rounding', 0, 4, 0.1],
+        ]],
+        ['Page stack', [
+          ['pages', 'Number of pages', 0, 4, 1],
+          ['gap', 'Gap between strips', 0, 20, 0.5],
+          ['overlap', 'Pull pages into the K (overlap)', 0, 20, 0.5],
+          ['firstPage', 'First page height', 20, 50, 1],
+          ['shrink', 'Each next page shorter by', 0, 15, 0.5],
+        ]],
+      ];
+      const COLORS = [['kColor', 'K (light bg)'], ['kDark', 'K (dark bg)'], ['page1', 'Page 1'], ['page2', 'Page 2'], ['page3', 'Pages 3–4']];
+
+      let S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('kova.logoTuner') || '{}') };
+
+      // ---------- controls ----------
+      const form = document.getElementById('controls');
+      for (const [group, items] of SLIDERS) {
+        form.insertAdjacentHTML('beforeend', `<fieldset><legend>${group}</legend>${items
+          .map(([k, label, min, max, step]) => `<label>${label}<output id="o-${k}"></output><input type="range" name="${k}" min="${min}" max="${max}" step="${step}"></label>`)
+          .join('')}</fieldset>`);
+      }
+      form.insertAdjacentHTML('beforeend', `<fieldset><legend>Colours</legend><div class="colors">${COLORS
+        .map(([k, label]) => `<label><input type="color" name="${k}">${label}</label>`).join('')}</div></fieldset>`);
+
+      const sync = () => {
+        for (const el of form.elements) if (el.name) el.value = S[el.name];
+        for (const [, items] of SLIDERS) for (const [k] of items) document.getElementById(`o-${k}`).textContent = S[k];
+      };
+      form.addEventListener('input', (e) => {
+        const el = e.target;
+        S[el.name] = el.type === 'range' ? +el.value : el.value;
+        localStorage.setItem('kova.logoTuner', JSON.stringify(S));
+        render();
+      });
+      document.getElementById('reset').onclick = () => { S = { ...DEFAULTS }; localStorage.removeItem('kova.logoTuner'); render(); };
+      document.getElementById('copy').onclick = async () => {
+        await navigator.clipboard.writeText(settingsText()).catch(() => {});
+        const b = document.getElementById('copy'); b.textContent = 'Copied ✓'; setTimeout(() => (b.textContent = 'Copy settings'), 1500);
+      };
+      const settingsText = () => 'KovaBill logo (trailing): ' + Object.entries(S).map(([k, v]) => `${k}=${v}`).join(', ');
+
+      // ---------- geometry (same as the options sheet) ----------
+      const poly = (p) => 'M' + p.map(([x, y]) => `${+x.toFixed(2)} ${+y.toFixed(2)}`).join('L') + 'Z';
+      function build(colors) {
+        const { lean, stem: SW, thick: T, gap, slope, pages, firstPage, shrink, overlap, round } = S;
+        const chevron = (v, h) => {
+          const up = h * (slope + lean), down = h * (slope - lean);
+          return [[v, 50], [v + up, 50 - h], [v + up + T, 50 - h], [v + T, 50], [v + down + T, 50 + h], [v + down, 50 + h]];
+        };
+        const stem = [[0, 0], [SW, 0], [SW, 100], [0, 100]];
+        const armsAt = SW + gap;
+        const shapes = [{ p: stem, c: colors.k }, { p: chevron(armsAt, 50), c: colors.k }];
+        const pageColors = [colors.page1, colors.page2, colors.page3, colors.page3];
+        for (let i = 1; i <= pages; i++) {
+          const h = Math.max(6, firstPage - (i - 1) * shrink);
+          shapes.push({ p: chevron(armsAt + i * (T + gap) - i * overlap, h), c: pageColors[i - 1] });
+        }
+        const pts = shapes.flatMap((s) => s.p).map(([x, y]) => [x + lean * y, y]);
+        const pad = 3 + round;
+        const minX = Math.min(...pts.map((p) => p[0])) - pad, maxX = Math.max(...pts.map((p) => p[0])) + pad;
+        const minY = Math.min(...pts.map((p) => p[1])) - pad, maxY = Math.max(...pts.map((p) => p[1])) + pad;
+        // draw back pages first so the K sits on top; overlap gets a thin cut-line in the background colour
+        const order = [...shapes.slice(2).reverse(), shapes[1], shapes[0]];
+        const cut = overlap > 0 ? `stroke="${colors.bg}" stroke-width="${3 + round}" paint-order="stroke"` : '';
+        const body = order.map((s) =>
+          overlap > 0
+            ? `<path d="${poly(s.p)}" fill="${s.c}" ${cut} stroke-linejoin="round"/>`
+            : `<path d="${poly(s.p)}" fill="${s.c}" stroke="${s.c}" stroke-width="${round * 2}" stroke-linejoin="round"/>`
+        ).join('');
+        return `<svg viewBox="${minX} ${minY} ${maxX - minX} ${maxY - minY}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="matrix(1 0 ${lean} 1 0 0)">${body}</g></svg>`;
+      }
+
+      const wm = `<span class="wm"><b>Kova</b><span>Bill</span></span>`;
+      function render() {
+        sync();
+        const light = { k: S.kColor, page1: S.page1, page2: S.page2, page3: S.page3, bg: '#f6f5f0' };
+        const dark = { k: S.kDark, page1: S.page1, page2: S.page2, page3: S.page3, bg: '#12130f' };
+        document.getElementById('light').innerHTML = build(light).replace('<svg', '<svg class="big"');
+        document.getElementById('dark').innerHTML = build(dark).replace('<svg', '<svg class="big"');
+        document.getElementById('lockLight').innerHTML = `<div class="lockup">${build(light)}${wm}</div>`;
+        document.getElementById('lockDark').innerHTML = `<div class="lockup">${build(dark)}${wm}</div>`;
+        document.getElementById('icons').innerHTML = [120, 64, 32, 16]
+          .map((s) => `<div class="app" style="width:${s}px;height:${s}px">${build(dark)}</div>`).join('');
+        document.getElementById('code').textContent = settingsText();
+      }
+      render();
+    </script>
+  </body>
+</html>
