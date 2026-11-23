@@ -85,6 +85,7 @@ export function newInvoice({ number = 'INV-001', profile = {}, client = {} } = {
     toName: client.name || '',
     toEmail: client.email || '',
     toAddress: client.address || '',
+    toPhone: client.phone || '',
     items: [newItem()],
     vatRate: profile.vatRate ?? 7.5, // Nigeria standard VAT
     discount: 0,
@@ -98,6 +99,7 @@ export function migrateInvoice(raw) {
   return {
     dueDate: '',
     toAddress: '',
+    toPhone: '',
     discount: 0,
     notes: '',
     ...raw,
@@ -164,7 +166,7 @@ export function groupClients(invoices) {
     if (!name) continue;
     const key = name.toLowerCase();
     if (!map.has(key))
-      map.set(key, { name, email: '', address: '', count: 0, billed: {}, outstanding: {}, last: '' });
+      map.set(key, { name, email: '', address: '', phone: '', count: 0, billed: {}, outstanding: {}, last: '' });
     const c = map.get(key);
     const total = calcTotals(inv).total;
     c.count += 1;
@@ -172,6 +174,7 @@ export function groupClients(invoices) {
       c.last = inv.date;
       c.email = inv.toEmail || c.email;
       c.address = inv.toAddress || c.address;
+      c.phone = inv.toPhone || c.phone;
     }
     if (inv.status !== 'draft') {
       c.billed[inv.currency] = (c.billed[inv.currency] || 0) + total;
@@ -187,34 +190,84 @@ export const formatMulti = (byCurrency) => {
   return parts.length ? parts.map(([c, v]) => formatMoney(v, c)).join(' · ') : formatMoney(0);
 };
 
-// ---------- plain-text invoice for email ----------
-export function invoiceAsText(inv, profile, appUrl = '') {
+// ---------- messages for WhatsApp / email ----------
+// kind: 'invoice' (send it), 'reminder' (still unpaid), 'receipt' (thanks for paying)
+// rich: WhatsApp-style *bold*; plain for email.
+export const MESSAGE_KINDS = [
+  { id: 'invoice', label: 'Invoice' },
+  { id: 'reminder', label: 'Reminder' },
+  { id: 'receipt', label: 'Thank you' },
+];
+
+export const defaultMessageKind = (inv) => {
+  const s = getStatus(inv);
+  return s === 'paid' ? 'receipt' : s === 'draft' ? 'invoice' : 'reminder';
+};
+
+export function buildMessage(inv, profile, kind = 'invoice', { rich = false, appUrl = '' } = {}) {
   const { subtotal, discount, vat, total } = calcTotals(inv);
   const m = (v) => formatMoney(v, inv.currency);
-  const lines = [
-    `Hi ${inv.toName || 'there'},`,
-    '',
-    `Please find invoice ${inv.number} below${inv.dueDate ? `, due ${formatDate(inv.dueDate)}` : ''}.`,
-    '',
-    ...inv.items
-      .filter((it) => it.description || Number(it.price))
-      .map((it) => `• ${it.description || 'Item'} — ${it.qty} × ${m(it.price)} = ${m(lineTotal(it))}`),
-    '',
-    `Subtotal: ${m(subtotal)}`,
-    ...(discount ? [`Discount: −${m(discount)}`] : []),
-    ...(Number(inv.vatRate) ? [`VAT (${inv.vatRate}%): ${m(vat)}`] : []),
-    `Total due: ${m(total)}`,
-  ];
-  if (profile.bankName || profile.accountNumber) {
-    lines.push('', 'Payment details:');
-    if (profile.bankName) lines.push(`Bank: ${profile.bankName}`);
-    if (profile.accountName) lines.push(`Account name: ${profile.accountName}`);
-    if (profile.accountNumber) lines.push(`Account number: ${profile.accountNumber}`);
+  const b = (t) => (rich ? `*${t}*` : t);
+  const from = profile.business || profile.firstName || '';
+  const hi = `Hi ${inv.toName?.trim() || 'there'},`;
+  const due = inv.dueDate ? formatDate(inv.dueDate) : '';
+  const lines = [hi, ''];
+  let subject;
+
+  const payTo = () => {
+    if (!(profile.bankName || profile.accountNumber)) return;
+    lines.push('', b('Pay to'));
+    lines.push([profile.bankName, profile.accountName, profile.accountNumber].filter(Boolean).join(' · '));
+  };
+
+  if (kind === 'receipt') {
+    subject = `Payment received for invoice ${inv.number}`;
+    lines.push(
+      `Thank you! I’ve received your payment of ${b(m(total))} for invoice ${b(inv.number)}${inv.paidAt ? ` on ${formatDate(inv.paidAt)}` : ''}.`,
+      '',
+      'It’s been a pleasure working with you.'
+    );
+  } else if (kind === 'reminder') {
+    const late = getStatus(inv) === 'overdue' ? daysBetween(inv.dueDate, todayISO()) : 0;
+    subject = late ? `Overdue: invoice ${inv.number}` : `Reminder: invoice ${inv.number}`;
+    lines.push(
+      late
+        ? `A friendly reminder that invoice ${b(inv.number)} for ${b(m(total))} was due on ${due} (${late} day${late === 1 ? '' : 's'} ago).`
+        : `A friendly reminder that invoice ${b(inv.number)} for ${b(m(total))} is due${due ? ` on ${due}` : ' soon'}.`,
+      '',
+      'If you’ve already paid, thank you, and please ignore this message.'
+    );
+    payTo();
+  } else {
+    subject = `Invoice ${inv.number}${from ? ` from ${from}` : ''}`;
+    lines.push(`Here’s invoice ${b(inv.number)}${due ? `, due ${due}` : ''}.`, '');
+    for (const it of inv.items.filter((x) => x.description || Number(x.price))) {
+      lines.push(`• ${it.description || 'Item'}: ${it.qty} × ${m(it.price)} = ${m(lineTotal(it))}`);
+    }
+    lines.push('');
+    if (discount || Number(inv.vatRate)) {
+      lines.push(`Subtotal: ${m(subtotal)}`);
+      if (discount) lines.push(`Discount: −${m(discount)}`);
+      if (Number(inv.vatRate)) lines.push(`VAT (${inv.vatRate}%): ${m(vat)}`);
+    }
+    lines.push(`${b('Total due')}: ${b(m(total))}`);
+    payTo();
+    if (inv.notes) lines.push('', inv.notes);
   }
-  if (inv.notes) lines.push('', inv.notes);
-  lines.push('', profile.business || profile.firstName || '');
-  if (appUrl) lines.push('', '—', `Sent with KovaBill, free invoicing: ${appUrl}`);
-  return lines.join('\n');
+
+  lines.push('', from ? `Thanks,\n${from}` : 'Thanks');
+  if (appUrl) lines.push('', `Sent with KovaBill: ${appUrl}`);
+  return { subject, text: lines.join('\n') };
+}
+
+// WhatsApp wants an international number with digits only (e.g. 2348031234567).
+export function whatsappNumber(phone = '', currency = 'NGN') {
+  const raw = String(phone).trim();
+  let d = raw.replace(/\D/g, '');
+  if (!d) return '';
+  if (raw.startsWith('+') || d.startsWith('00')) return d.replace(/^00/, '');
+  if (d.startsWith('0') && currency === 'NGN') return `234${d.slice(1)}`; // local Nigerian format
+  return d;
 }
 
 // ---------- sample data ----------

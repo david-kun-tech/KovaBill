@@ -114,7 +114,7 @@ export function useStore() {
       const next = { ...inv, status };
       if (status === 'paid') next.paidAt = inv.paidAt || todayISO();
       else next.paidAt = undefined;
-      if (status !== 'draft') next.sentAt = inv.sentAt || todayISO();
+      next.sentAt = status === 'draft' ? undefined : inv.sentAt || todayISO();
       update(next);
       return next;
     },

@@ -63,6 +63,7 @@ export default function Receipt({ invoice, profile }) {
           <span className="eyebrow">Billed to</span>
           <strong>{invoice.toName || 'Client name'}</strong>
           {invoice.toEmail && <span>{invoice.toEmail}</span>}
+          {invoice.toPhone && <span>{invoice.toPhone}</span>}
           {invoice.toAddress && <span className="pre">{invoice.toAddress}</span>}
         </div>
 

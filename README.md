@@ -12,7 +12,7 @@ Everything runs on the user's device: no backend, no sign-up. It installs as an 
 - **Overview dashboard**: unpaid and overdue counts, a collection-rate ring, and a 12-week **revenue pulse** (money paid rises above the line, money still owed hangs below)
 - **Invoice editor** with a live preview: a "Send to" ticket card, line items with details, VAT, discount and multi-currency support
 - **Status tracking**: Draft → Sent → Paid. Overdue invoices are flagged automatically, and the preview gets a rubber-stamp status
-- **Send by email**: opens your mail app with the invoice already written out and marks it as sent
+- **Send via WhatsApp, Gmail or email**: one tap opens WhatsApp (straight to the client's chat if you saved their number), Gmail or your mail app with the message written for you: the invoice, a payment reminder, or a thank-you once paid. Edit it first if you like; drafts are marked as sent
 - **Download PDF** through a print stylesheet that shows only the invoice, with the file named after the invoice
 - **Clients**: an address book built from your invoices, showing billed and outstanding totals and a "Bill again" button
 - **Search and filters**: All, Draft, Unpaid, Overdue and Paid

@@ -3,14 +3,13 @@ import { Avatar, Icon } from '../components/ui.jsx';
 import Receipt from '../components/Receipt.jsx';
 import NumberInput from '../components/NumberInput.jsx';
 import { navigate } from '../hooks/useHashRoute.js';
-import { APP_URL } from '../config.js';
+import SendSheet from '../components/SendSheet.jsx';
 import {
   CURRENCIES,
   currencySymbol,
   calcTotals,
   formatMoney,
   getStatus,
-  invoiceAsText,
   isBlank,
   lineTotal,
   newItem,
@@ -24,6 +23,7 @@ const STEPS = [
 
 export default function Editor({ invoice, profile, clients, onChange, onStatus, onDelete, onDuplicate, notify }) {
   const [tab, setTab] = useState('edit');
+  const [sending, setSending] = useState(false);
   const pickerRef = useRef(null);
   const emailRef = useRef(null);
 
@@ -70,7 +70,7 @@ export default function Editor({ invoice, profile, clients, onChange, onStatus, 
     });
 
   const pickClient = (c) => {
-    onChange({ ...invoice, toName: c.name, toEmail: c.email, toAddress: c.address });
+    onChange({ ...invoice, toName: c.name, toEmail: c.email, toAddress: c.address, toPhone: c.phone || '' });
     pickerRef.current?.removeAttribute('open');
   };
 
@@ -79,38 +79,32 @@ export default function Editor({ invoice, profile, clients, onChange, onStatus, 
     const match = clients.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
     onChange(
       match && !invoice.toEmail && !invoice.toAddress
-        ? { ...invoice, toName: name, toEmail: match.email, toAddress: match.address }
+        ? { ...invoice, toName: name, toEmail: match.email, toAddress: match.address, toPhone: match.phone || '' }
         : { ...invoice, toName: name }
     );
   };
 
-  const send = () => {
-    if (!invoice.toEmail) {
-      notify('Add the client’s email first');
-      setTab('edit');
-      emailRef.current?.focus();
-      return;
-    }
-    const subject = `Invoice ${invoice.number} from ${profile.business || profile.firstName || 'me'}`;
-    window.location.href = `mailto:${encodeURIComponent(invoice.toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(invoiceAsText(invoice, profile, APP_URL))}`;
-    if (invoice.status === 'draft') {
+  const sent = (kind, how) => {
+    const where = { whatsapp: 'WhatsApp', gmail: 'Gmail', email: 'your email app', share: 'the share menu' }[how];
+    if (kind === 'invoice' && invoice.status === 'draft') {
       onStatus(invoice, 'sent');
-      notify('Email drafted · marked as sent');
-    } else notify('Email drafted');
+      notify(how === 'copy' ? 'Copied · marked as sent' : `Opened ${where} · marked as sent`);
+    } else if (how !== 'copy') notify(`Opened ${where}`);
   };
 
-  const primary =
+  const markPaid = () => {
+    onStatus(invoice, 'paid');
+    notify(`${invoice.number} marked as paid`);
+  };
+
+  const actions =
     status === 'draft'
-      ? { label: 'Send invoice', icon: 'send', run: send }
+      ? { primary: { label: 'Send invoice', icon: 'send', run: () => setSending(true) } }
       : status === 'paid'
-        ? { label: 'Send again', icon: 'send', run: send }
+        ? { primary: { label: 'Send thank-you', icon: 'send', run: () => setSending(true) } }
         : {
-            label: 'Mark as paid',
-            icon: 'check',
-            run: () => {
-              onStatus(invoice, 'paid');
-              notify(`${invoice.number} marked as paid`);
-            },
+            primary: { label: 'Mark as paid', icon: 'check', run: markPaid },
+            secondary: { label: 'Send reminder', icon: 'send', run: () => setSending(true) },
           };
 
   const del = () => {
@@ -211,6 +205,19 @@ export default function Editor({ invoice, profile, clients, onChange, onStatus, 
                 placeholder="client@email.com"
                 value={invoice.toEmail}
                 onChange={set('toEmail')}
+              />
+              <label className="sr-only" htmlFor="toPhone">
+                Client WhatsApp number
+              </label>
+              <input
+                id="toPhone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                className="ticket-line"
+                placeholder="WhatsApp number (optional)"
+                value={invoice.toPhone || ''}
+                onChange={set('toPhone')}
               />
             </div>
             <div className="ticket-stub">
@@ -351,13 +358,30 @@ export default function Editor({ invoice, profile, clients, onChange, onStatus, 
           </label>
 
           <div className="cta">
-            <button className="btn btn-soft btn-block" onClick={() => window.print()}>
-              Download PDF <Icon name="download" size={18} />
-            </button>
-            <button className="btn btn-ink btn-block btn-lg" onClick={primary.run}>
-              {primary.label} <Icon name={primary.icon} size={18} />
+            <div className="cta-row">
+              <button className="btn btn-soft btn-block" onClick={() => window.print()}>
+                Download PDF <Icon name="download" size={18} />
+              </button>
+              {actions.secondary && (
+                <button className="btn btn-soft btn-block" onClick={actions.secondary.run}>
+                  {actions.secondary.label} <Icon name={actions.secondary.icon} size={18} />
+                </button>
+              )}
+            </div>
+            <button className="btn btn-ink btn-block btn-lg" onClick={actions.primary.run}>
+              {actions.primary.label} <Icon name={actions.primary.icon} size={18} />
             </button>
           </div>
+
+          {sending && (
+            <SendSheet
+              invoice={invoice}
+              profile={profile}
+              onSent={sent}
+              onClose={() => setSending(false)}
+              notify={notify}
+            />
+          )}
         </section>
 
         <aside className="preview-pane" aria-label="Invoice preview">
